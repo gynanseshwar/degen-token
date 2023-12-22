@@ -1,0 +1,84 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "hardhat/console.sol";
+
+contract DegenToken is ERC20, Ownable, ERC20Burnable {
+    using SafeMath for uint256;
+
+    event LogMessage(string message);
+
+    struct Equipment {
+        uint256 cost;
+        uint256 total;
+    }
+
+    mapping(string => Equipment) public equipments;
+
+    modifier equipmentExists(string memory equipmentName) {
+        require(bytes(equipmentName).length > 0, "Equipment name cannot be empty");
+        _;
+    }
+
+    modifier equipmentNotExists(string memory equipmentName) {
+        require(equipments[equipmentName].cost == 0, "Equipment already exists");
+        _;
+    }
+
+    constructor(
+        string memory initialEquipmentName,
+        uint256 initialEquipmentCost,
+        uint256 initialEquipmentTotal
+    ) ERC20("DEGEN", "DGN") Ownable(msg.sender) {
+        setEquipmentCostsAndTotals(initialEquipmentName, initialEquipmentCost, initialEquipmentTotal);
+    }
+
+    function mintTokens(address donor, uint256 bulk) external onlyOwner {
+        _mint(donor, bulk);
+    }
+
+    function transferTokens(address donor, uint256 bulk) external {
+        _transfer(msg.sender, donor, bulk);
+    }
+
+    function setEquipmentCostsAndTotals(
+        string memory equipmentName,
+        uint256 cost,
+        uint256 total
+    ) public onlyOwner equipmentNotExists(equipmentName) {
+        require(cost > 0, "Cost must be greater than zero");
+        require(total >= 0, "Total must be greater than or equal to zero");
+
+        equipments[equipmentName] = Equipment(cost, total);
+        emit LogMessage("Set equipment costs and totals");
+    }
+
+    function redeemEquipment(
+        string memory equipmentName,
+        uint256 length
+    ) external equipmentExists(equipmentName) {
+        Equipment storage equipment = equipments[equipmentName];
+        require(equipment.total >= length, "Insufficient equipment quantity");
+
+        uint256 totalCost = equipment.cost * length;
+        require(balanceOf(msg.sender) >= totalCost, "INSUFFICIENT FUNDS!!");
+
+        _transfer(msg.sender, owner(), totalCost);
+
+        equipment.total = equipment.total.sub(length);
+        emit LogMessage("Redeemed equipment");
+    }
+
+    function removeEquipment(string memory equipmentName) external onlyOwner equipmentExists(equipmentName) {
+        delete equipments[equipmentName];
+        emit LogMessage("Removed equipment");
+    }
+
+    function burnTokens(uint256 length) external onlyOwner {
+        _burn(msg.sender, length);
+    }
+}
